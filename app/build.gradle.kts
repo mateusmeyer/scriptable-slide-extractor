@@ -14,6 +14,12 @@ plugins {
     application
 }
 
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
+}
+
 repositories {
     // Use Maven Central for resolving dependencies.
     mavenCentral()
@@ -39,12 +45,23 @@ dependencies {
     implementation("org.apache.poi:poi-ooxml:5.0.0")
     implementation("org.apache.poi:poi-scratchpad:5.0.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.0")
+    implementation("com.github.ajalt.clikt:clikt:3.2.0")
+    implementation("me.tongfei:progressbar:0.9.1")
     implementation("net.java.dev.jna:jna:5.8.0")
-    implementation("org.jetbrains.kotlin:kotlin-reflect:1.5.0")
-    implementation("org.jetbrains.kotlin:kotlin-script-runtime:1.5.0")
+
+    val kotlinLibVersion = "1.5.10"
+
+    implementation("org.jetbrains.kotlin:kotlin-reflect:${kotlinLibVersion}")
+    implementation("org.jetbrains.kotlin:kotlin-script-runtime:${kotlinLibVersion}")
     implementation("org.jetbrains.kotlin:kotlin-compiler-embeddable:1.5.0")
-    implementation("org.jetbrains.kotlin:kotlin-script-util:1.5.0")
-    implementation("org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:1.5.0")
+    implementation("org.jetbrains.kotlin:kotlin-script-util:${kotlinLibVersion}")
+    implementation("org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:${kotlinLibVersion}")
+    /*implementation(kotlin("reflect"))
+    implementation(kotlin("script-runtime"))
+    implementation(kotlin("compiler-embeddable"))
+    implementation(kotlin("script-util"))
+    implementation(kotlin("scripting-compiler-embeddable"))*/
+
 }
 
 application {

@@ -1,10 +1,10 @@
 package br.com.mateusmeyer.scriptable_slide_extractor
 
-import org.bouncycastle.util.Properties
+import br.com.mateusmeyer.scriptable_slide_extractor.model.Presentation;
 
-fun extractor(fn: SlideExtractor.() -> Unit) = SlideExtractor().apply(fn)
+fun parser(fn: SlideParser.() -> Unit) = SlideParser().apply(fn)
 
-class SlideExtractor {
+class SlideParser {
     class Properties {
         var name: String? = null;
         var author: String? = null;
@@ -12,21 +12,21 @@ class SlideExtractor {
         var test: ((Presentation) -> Boolean)? = null;
     }
 
-    var _props: Properties = Properties()
+    var props: Properties = Properties()
 
     inline fun name(name: () -> String) {
-        _props.name = name()
+        props.name = name()
     }
 
     inline fun author(author: () -> String) {
-        _props.author = author()
+        props.author = author()
     }
 
     inline fun version(version: () -> String) {
-        _props.version = version()
+        props.version = version()
     }
 
     fun test(tester: (presentation: Presentation) -> Boolean) {
-        _props.test = tester;
+        props.test = tester;
     }
 }

@@ -1,4 +1,4 @@
-package br.com.mateusmeyer.scriptable_slide_extractor
+package br.com.mateusmeyer.scriptable_slide_extractor.model
 
 enum class SlideTextAlign {
     LEFT,
@@ -45,6 +45,7 @@ data class Presentation(
     val slides: List<Slide>
 )
 
-interface SlideConverterBase {
+interface SlideExtractor {
+    fun presentation(): Presentation
     fun slides(): List<Slide>
 }

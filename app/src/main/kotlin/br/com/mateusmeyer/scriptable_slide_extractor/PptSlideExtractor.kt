@@ -10,20 +10,35 @@ import org.apache.poi.ooxml.POIXMLDocument
 import org.apache.poi.sl.usermodel.ShapeType
 import org.apache.poi.sl.usermodel.TextParagraph.TextAlign
 
-class PptSlideConverter : SlideConverterBase {
+import br.com.mateusmeyer.scriptable_slide_extractor.model.Presentation;
+import br.com.mateusmeyer.scriptable_slide_extractor.model.Slide;
+import br.com.mateusmeyer.scriptable_slide_extractor.model.SlideExtractor;
+import br.com.mateusmeyer.scriptable_slide_extractor.model.SlideColor;
+import br.com.mateusmeyer.scriptable_slide_extractor.model.SlideTextRun;
+import br.com.mateusmeyer.scriptable_slide_extractor.model.SlideParagraph;
+import br.com.mateusmeyer.scriptable_slide_extractor.model.SlideTextBox;
+import br.com.mateusmeyer.scriptable_slide_extractor.model.SlideTextAlign;
+
+class PptSlideExtractor : SlideExtractor {
     val slideshow: HSLFSlideShow;
 
     constructor(inputStream: InputStream) {
         slideshow = HSLFSlideShow(inputStream);
     }
 
+    override fun presentation(): Presentation {
+        return Presentation(
+            slides = slides()
+        )
+    }
+
     override fun slides(): List<Slide> {
         return slideshow.slides.map {slide ->
 
             Slide(
-                slide?.slideNumber,
-                slide?.title ?: slide?.slideName,
-                slideTextBoxes(slide)
+                number = slide?.slideNumber,
+                title = slide?.title ?: slide?.slideName,
+                textBoxes = slideTextBoxes(slide)
             )
         }
     }
@@ -33,9 +48,9 @@ class PptSlideConverter : SlideConverterBase {
             ?.filter({shape -> shape.shapeType == ShapeType.TEXT_BOX})
             ?.map {shape -> 
                 SlideTextBox(
-                    (shape as HSLFTextShape).text,
-                    shape.getTextHeight(null),
-                    slideTextBoxParagraphs(shape)
+                    text = (shape as HSLFTextShape).text,
+                    textSize = shape.getTextHeight(null),
+                    paragraphs = slideTextBoxParagraphs(shape)
                 )
             }
             ?: listOf()
@@ -46,15 +61,15 @@ class PptSlideConverter : SlideConverterBase {
             .textParagraphs
             .map {paragraph ->
                 SlideParagraph(
-                    paragraph.map {textRun -> 
+                    textRuns = paragraph.map {textRun -> 
                         SlideTextRun(
-                            textRun.rawText,
-                            textRun.isBold,
-                            textRun.isItalic,
-                            textRun.isUnderlined,
-                            textRun.fontSize,
-                            textRun.fontFamily,
-                            SlideColor(
+                            text = textRun.rawText,
+                            bold = textRun.isBold,
+                            italic = textRun.isItalic,
+                            underlined = textRun.isUnderlined,
+                            fontSize = textRun.fontSize,
+                            fontFamily = textRun.fontFamily,
+                            color = SlideColor(
                                 textRun.fontColor.solidColor.color.red,
                                 textRun.fontColor.solidColor.color.green,
                                 textRun.fontColor.solidColor.color.blue,
@@ -62,7 +77,7 @@ class PptSlideConverter : SlideConverterBase {
                             )
                         )
                     },
-                    when (paragraph.textAlign) {
+                    textAlign = when (paragraph.textAlign) {
                         TextAlign.LEFT -> SlideTextAlign.LEFT
                         TextAlign.CENTER -> SlideTextAlign.CENTER
                         TextAlign.RIGHT -> SlideTextAlign.RIGHT
