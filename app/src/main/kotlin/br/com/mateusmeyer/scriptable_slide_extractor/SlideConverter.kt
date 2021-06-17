@@ -1,10 +1,10 @@
 package br.com.mateusmeyer.scriptable_slide_extractor
 
-import br.com.mateusmeyer.scriptable_slide_extractor.model.Presentation;
+import br.com.mateusmeyer.scriptable_slide_extractor.model.Presentation
 
-fun parser(fn: SlideParser.() -> Unit) = SlideParser().apply(fn)
+fun converter(fn: SlideConverter.() -> Unit) = SlideConverter().apply(fn)
 
-class SlideParser {
+class SlideConverter {
     class Properties {
         var name: String? = null;
         var author: String? = null;

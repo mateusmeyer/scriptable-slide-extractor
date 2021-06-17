@@ -98,7 +98,7 @@ fun extractInfo(slide: Slide): Pair<List<Pair<SlideTextBox, Boolean>>?, List<Sli
     return Pair(contentTextBoxes, titleTextBoxes)
 }
 
-parser {
+converter {
 	name {"Hinos Padronizados JO"}
 	author {"Mateus Meyer Jiacomelli"}
 	version {"1"}

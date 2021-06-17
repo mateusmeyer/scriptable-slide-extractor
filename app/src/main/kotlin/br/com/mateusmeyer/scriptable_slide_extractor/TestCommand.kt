@@ -15,6 +15,7 @@ import java.time.temporal.ChronoUnit
 import java.time.Duration
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
 
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.subcommands
@@ -40,17 +41,18 @@ class TestCommand : CliktCommand(name="test") {
         runner.loadSlideFiles(testFiles)
 
         val parentConcurrency = (currentContext.parent?.command as ScriptableSlideExtractor)
-            .concurrency or 2;
+            .concurrency
 
         val semaphore = Semaphore(parentConcurrency)
 
         doCompileScripts(runner, semaphore)
+        doSortScripts(runner)
         doTestFiles(runner, semaphore)
             .let(::printTestFiles)
         
     }
 
-    protected fun printTestFiles(results: Map<String, SlideParser?>) {
+    protected fun printTestFiles(results: Map<String, SlideConverter?>) {
         val foundFiles = results.size;
 
         println("\nFound ${foundFiles} file(s).\n")
@@ -69,22 +71,20 @@ class TestCommand : CliktCommand(name="test") {
             "Compiling Scripts",
             runner.scriptFiles.size.toLong() * 2,
         ).use {bar ->
-            runBlocking {
-                runner.eachScript { file ->
-                    async(Dispatchers.Default) {
-                        semaphore.withPermit {
-                            bar.step()
-                            runner.loadRunner(file)
-                            bar.step()
-                        }
-                    }
-                }
+            runner.eachScript { file ->
+                bar.step()
+                runner.loadRunner(file)
+                bar.step()
             }
         }
     }
 
-    protected fun doTestFiles(runner: MainRunner, semaphore: Semaphore): Map<String, SlideParser?> {
-        var foundTests: Map<String, SlideParser?> = ConcurrentHashMap()
+    protected fun doSortScripts(runner: MainRunner) {
+        runner.scriptRunners = runner.scriptRunners.sortedWith(compareBy {it.filename})
+    }
+
+    protected fun doTestFiles(runner: MainRunner, semaphore: Semaphore): Map<String, SlideConverter?> {
+        var foundTests: Map<String, SlideConverter?> = ConcurrentHashMap()
 
         makeProgressBar(
             "Testing Files",
@@ -107,7 +107,7 @@ class TestCommand : CliktCommand(name="test") {
                                 foundMatchingScriptRunner != null
                             }
 
-                            foundTests += file.path to foundMatchingScriptRunner?.slideParser
+                            foundTests += file.path to foundMatchingScriptRunner?.slideConverter
 
                             bar.step()
                         }

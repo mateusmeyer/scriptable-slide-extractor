@@ -19,7 +19,7 @@ class SlideExtractorDecider : SlideExtractor {
 
         extractor = when (file.extension) {
             "pptx" -> PptxSlideExtractor(file.inputStream())
-            "ppt" -> PptSlideExtractor(file.inputStream())
+            "ppt" -> PptSlideExtractor(file)
             else -> throw Exception("File '${filePath} is not supported.")
         }
         

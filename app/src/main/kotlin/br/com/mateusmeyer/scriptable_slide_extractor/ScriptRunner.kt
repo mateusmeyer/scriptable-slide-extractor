@@ -10,54 +10,56 @@ import br.com.mateusmeyer.scriptable_slide_extractor.model.Presentation;
 
 class ScriptRunner {
     companion object {
-        protected val scriptEngine = ScriptEngineManager()
-        protected val factory = scriptEngine.getEngineByExtension("kts").factory
+        val scriptEngine = ScriptEngineManager()
+        val factory = scriptEngine.getEngineByExtension("kts").factory
     }
 
     val scriptContent: String;
-    lateinit var slideParser: SlideParser;
+    lateinit var slideConverter: SlideConverter;
+    val filename: String;
 
 	constructor(file: File) {
+        filename = file.name
         scriptContent = generateScriptContent(file)
     }
 
     fun compile() {
-        if (!::slideParser.isInitialized) {
+        if (!::slideConverter.isInitialized) {
             val engine = factory.scriptEngine as KotlinJsr223JvmLocalScriptEngine
 
             val scriptContext = SimpleScriptContext()
             var bindings = scriptContext.getBindings(ScriptContext.ENGINE_SCOPE)
-            bindings.put("parser", ::parser)
+            bindings.put("converter", ::converter)
             scriptContext.setBindings(bindings, ScriptContext.ENGINE_SCOPE)
 
-            val parser = engine.eval(scriptContent, scriptContext)
+            val converter = engine.eval(scriptContent, scriptContext)
 
-            if (parser == null) {
-                throw Exception("Script doesn't have a 'parser' declaration.")
-            } else if (parser !is SlideParser) {
-                throw Exception("Script returns an invalid object. Make sure that 'parser' declaration is the last of file!")
+            if (converter == null) {
+                throw Exception("Script doesn't have a 'converter' declaration.")
+            } else if (converter !is SlideConverter) {
+                throw Exception("Script returns an invalid object. Make sure that 'converter' declaration is the last of file!")
             }
 
-            slideParser = parser
+            slideConverter = converter
         }
     }
 
     fun test(presentation: Presentation): Boolean = isCompiled {
-        slideParser.props.test?.invoke(presentation) ?: false
+        slideConverter.props.test?.invoke(presentation) ?: false
     }
 
     protected fun generateScriptContent(file: File): String {
         return (
             """
             import ${Presentation::class.java.packageName}.*
-            val parser = bindings["parser"] as (fn: ${SlideParser::class.qualifiedName}.() -> Unit) -> ${SlideParser::class.qualifiedName}
+            val converter = bindings["converter"] as (fn: ${SlideConverter::class.qualifiedName}.() -> Unit) -> ${SlideConverter::class.qualifiedName}
 
             ${file.readText()}
             """.trimStart())
     }
 
     protected fun <R> isCompiled(fn: () -> R): R {
-        if (::slideParser.isInitialized) {
+        if (::slideConverter.isInitialized) {
             return fn()
         } else {
             throw Exception("Script is not compiled yet.")

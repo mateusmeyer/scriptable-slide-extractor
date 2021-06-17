@@ -1,4 +1,4 @@
-parser {
+converter {
 	name {"One Slide"}
 	author {"Mateus Meyer Jiacomelli"}
 	version {"1"}

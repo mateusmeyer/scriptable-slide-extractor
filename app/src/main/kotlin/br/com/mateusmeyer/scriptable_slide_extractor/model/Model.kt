@@ -1,5 +1,7 @@
 package br.com.mateusmeyer.scriptable_slide_extractor.model
 
+import java.time.LocalDateTime
+
 enum class SlideTextAlign {
     LEFT,
     RIGHT,
@@ -14,12 +16,17 @@ data class SlideColor (
     val a: Int? = null
 )
 
+data class SlideSize(
+    val width: Int,
+    val height: Int
+)
+
 data class SlideTextRun(
     val text: String,
     val bold: Boolean,
     val italic: Boolean,
     val underlined: Boolean,
-    val fontSize: Double,
+    val fontSize: Double?,
     val fontFamily: String?,
     val color: SlideColor?
 )
@@ -38,10 +45,15 @@ data class SlideTextBox(
 data class Slide(
     val number: Int?,
     val title: String?,
-    val textBoxes: List<SlideTextBox>
+    val textBoxes: List<SlideTextBox>,
+    val notes: List<SlideTextBox>,
 )
 
 data class Presentation(
+    val fileName: String,
+    val filePath: String,
+    val pageSize: SlideSize,
+    val lastModified: LocalDateTime?,
     val slides: List<Slide>
 )
 
