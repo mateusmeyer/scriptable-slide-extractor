@@ -61,3 +61,7 @@ interface SlideExtractor {
     fun presentation(): Presentation
     fun slides(): List<Slide>
 }
+
+data class SlideConverterPayload(
+    val presentation: Presentation
+)

@@ -2,7 +2,15 @@ package br.com.mateusmeyer.scriptable_slide_extractor
 
 import java.io.File
 import java.nio.file.Path
+import java.util.concurrent.ConcurrentHashMap
 
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.withPermit
+
+import br.com.mateusmeyer.scriptable_slide_extractor.model.Presentation;
 import br.com.mateusmeyer.scriptable_slide_extractor.model.SlideExtractor;
 
 class MainRunner {
@@ -60,7 +68,7 @@ class MainRunner {
         }
     }
 
-    protected fun parseFileOrFolder(path: Path, each: (file: File) -> Unit) {
+    fun parseFileOrFolder(path: Path, each: (file: File) -> Unit) {
         val file = path.toFile()
 
         if (!file.exists()) {
@@ -76,4 +84,56 @@ class MainRunner {
         }
     }
 
+    fun doCompileScripts(semaphore: Semaphore) {
+        makeProgressBar(
+            "Compiling Scripts",
+            scriptFiles.size.toLong() * 2,
+        ).use {bar ->
+            eachScript { file ->
+                bar.step()
+                loadRunner(file)
+                bar.step()
+            }
+        }
+    }
+
+    fun doSortScripts() {
+        scriptRunners = scriptRunners.sortedWith(compareBy {it.filename})
+    }
+
+    fun doTestFiles(semaphore: Semaphore): Map<String, Pair<SlideConverter?, Presentation>> {
+        var foundTests: Map<String, Pair<SlideConverter?, Presentation>> = ConcurrentHashMap()
+
+        makeProgressBar(
+            "Testing Files",
+            slideFiles.size.toLong() * 2,
+        ).use {bar ->
+            runBlocking {
+                eachSlideFile { file ->
+                    async(Dispatchers.Default) {
+                        semaphore.withPermit {
+                            bar.step()
+
+                            val extractor = createSlideExtractor(file)
+                            val presentation = extractor.presentation()
+                            var foundMatchingScriptRunner: ScriptRunner? = null
+
+                            eachScriptRunner {scriptRunner ->
+                                if (scriptRunner.test(presentation)) {
+                                    foundMatchingScriptRunner = scriptRunner
+                                }
+                                foundMatchingScriptRunner != null
+                            }
+
+                            foundTests += file.path to Pair(foundMatchingScriptRunner?.slideConverter, presentation)
+                            bar.step()
+                        }
+                    }
+                }
+            }
+        }
+
+        return foundTests;
+    }
+    
 }

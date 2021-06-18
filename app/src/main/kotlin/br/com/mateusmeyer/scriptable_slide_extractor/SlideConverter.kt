@@ -1,15 +1,16 @@
 package br.com.mateusmeyer.scriptable_slide_extractor
 
 import br.com.mateusmeyer.scriptable_slide_extractor.model.Presentation
+import br.com.mateusmeyer.scriptable_slide_extractor.model.SlideConverterPayload
 
 fun converter(fn: SlideConverter.() -> Unit) = SlideConverter().apply(fn)
-
 class SlideConverter {
     class Properties {
         var name: String? = null;
         var author: String? = null;
         var version: String? = null;
         var test: ((Presentation) -> Boolean)? = null;
+        var convert: ((SlideConverterPayload) -> Unit)? = null;
     }
 
     var props: Properties = Properties()
@@ -28,5 +29,9 @@ class SlideConverter {
 
     fun test(tester: (presentation: Presentation) -> Boolean) {
         props.test = tester;
+    }
+
+    fun convert(converter: (payload: SlideConverterPayload) -> Unit) {
+        props.convert = converter;
     }
 }

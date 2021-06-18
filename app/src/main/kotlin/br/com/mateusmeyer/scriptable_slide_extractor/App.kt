@@ -20,5 +20,5 @@ class ScriptableSlideExtractor : CliktCommand(help = "Test files over extractors
 }
 
 fun main(args: Array<String>) = ScriptableSlideExtractor()
-    .subcommands(TestCommand())
+    .subcommands(TestCommand(), ConvertCommand())
     .main(args)
