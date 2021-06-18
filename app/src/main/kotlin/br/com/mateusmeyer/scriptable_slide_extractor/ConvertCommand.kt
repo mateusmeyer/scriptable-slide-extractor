@@ -40,7 +40,7 @@ class ConvertCommand : CliktCommand(name="convert") {
 
         runner.doCompileScripts(semaphore)
         runner.doSortScripts()
-        runner.doTestFiles(semaphore)
+        runner.doTestFiles(semaphore, parentConcurrency)
             .let(::abortOnNonConvertibleFiles)
             .let(::convertFiles)
         
@@ -54,7 +54,7 @@ class ConvertCommand : CliktCommand(name="convert") {
 
         if (!ignoreNonConvertable) {
             if (!empties.isEmpty()) {
-                println("\nThere's some files that aren't processable in any of provided converters.\n")
+                println("\nThere are some files that aren't processable by any of provided converters.\n")
                 for ((file) in empties) {
                     println(file)
                 }

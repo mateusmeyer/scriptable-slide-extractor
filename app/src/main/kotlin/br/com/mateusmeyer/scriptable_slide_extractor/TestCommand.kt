@@ -13,6 +13,8 @@ import java.util.concurrent.CountDownLatch
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.multiple
+import com.github.ajalt.clikt.parameters.options.option
+import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.types.path
 
 import br.com.mateusmeyer.scriptable_slide_extractor.model.Presentation;
@@ -24,6 +26,9 @@ class TestCommand : CliktCommand(name="test") {
     val testFiles: List<Path> by argument(help = "File(s) for testing")
         .path(mustExist = true, mustBeReadable = true)
         .multiple()
+
+    val showNonConvertableOnly by option("-n", "--non-convertable-only", help="Show only non-convertable files")
+        .flag()
 
     override fun run() {
         val runner = MainRunner()
@@ -37,21 +42,31 @@ class TestCommand : CliktCommand(name="test") {
 
         runner.doCompileScripts(semaphore)
         runner.doSortScripts()
-        runner.doTestFiles(semaphore)
+        runner.doTestFiles(semaphore, parentConcurrency)
             .let(::printTestFiles)
         
     }
 
     protected fun printTestFiles(results: Map<String, Pair<SlideConverter?, Presentation>>) {
-        val foundFiles = results.size;
+        var empties = 0
 
-        println("\nFound ${foundFiles} file(s).\n")
+        if (showNonConvertableOnly) {
+            empties = results.filter { (file, pair) ->
+                val (converter) = pair;
+                converter == null
+            }.size
+        }
+
+        println("\nFound ${results.size} file(s); ${empties} aren't processable.")
+        println("The following files aren't processable by any of provided converters:\n")
 
         for ((file, pair) in results) {
             val (converter) = pair
 
             if (converter != null) {
-                println("${file}: ${converter.props.name}");
+                if (!showNonConvertableOnly) {
+                    println("${file}: ${converter.props.name}");
+                }
             } else {
                 println("${file}: --");
             }

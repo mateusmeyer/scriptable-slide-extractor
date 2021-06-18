@@ -6,6 +6,17 @@ data class TextSizes(
     val title: Double
 )
 
+data class WithChorusSlideTextBox(
+    val textBox: SlideTextBox,
+    val chorus: Boolean
+)
+
+data class ExtractedSlideInfo(
+    val slide: Slide,
+    val titleTextBoxes: List<SlideTextBox>,
+    val contentTextBoxes: List<WithChorusSlideTextBox>
+)
+
 val textSizes = listOf(
     TextSizes(
         normal = 40.0,
@@ -57,10 +68,10 @@ val textSizes = listOf(
     ),
 )
 
-fun extractInfo(slide: Slide): Pair<List<Pair<SlideTextBox, Boolean>>?, List<SlideTextBox>?> {
+fun extractInfo(slide: Slide): ExtractedSlideInfo? {
     val textBoxes = slide.textBoxes;
 
-    var contentTextBoxes: List<Pair<SlideTextBox, Boolean>> = ArrayList()
+    var contentTextBoxes: List<WithChorusSlideTextBox> = ArrayList()
     var titleTextBoxes: List<SlideTextBox> = ArrayList()
 
     textLoop@ for (textBox in textBoxes) {
@@ -78,24 +89,32 @@ fun extractInfo(slide: Slide): Pair<List<Pair<SlideTextBox, Boolean>>?, List<Sli
                         val isTextItalic = textRun.italic
                         val isTextChorus = isChorusSize and (if (textSize.isChorusItalic) isTextItalic else false)
 
-                        contentTextBoxes += Pair(textBox, isTextChorus)
+                        contentTextBoxes += WithChorusSlideTextBox(textBox, isTextChorus)
                         matchTextSize = true
-                        continue@textLoop
                     } else if (textRunSize == textSize.title.toDouble()) {
                         titleTextBoxes += textBox;
                         matchTextSize = true
-                        continue@textLoop
                     }
                 }
 
                 if (!matchTextSize) {
-                    return Pair(null, null)
+                    return null
                 }
+                
+                continue@textLoop
             }
         }
     }
 
-    return Pair(contentTextBoxes, titleTextBoxes)
+    return ExtractedSlideInfo(
+        slide,
+        titleTextBoxes,
+        contentTextBoxes
+    )
+}
+
+fun parseSlideInfo(extractionInfo: ExtractedSlideInfo) {
+
 }
 
 converter {
@@ -108,7 +127,7 @@ converter {
 
         for (slide in presentation.slides) {
             val extractionInfo = extractInfo(slide)
-            allSlidesCorrect = extractionInfo.first != null && extractionInfo.second != null
+            allSlidesCorrect = extractionInfo != null
 
             if (!allSlidesCorrect) {
                 break;
@@ -119,5 +138,7 @@ converter {
 	}
 
     convert { data ->
+
     }
+
 }

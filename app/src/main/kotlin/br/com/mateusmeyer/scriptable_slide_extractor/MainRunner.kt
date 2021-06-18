@@ -101,32 +101,36 @@ class MainRunner {
         scriptRunners = scriptRunners.sortedWith(compareBy {it.filename})
     }
 
-    fun doTestFiles(semaphore: Semaphore): Map<String, Pair<SlideConverter?, Presentation>> {
-        var foundTests: Map<String, Pair<SlideConverter?, Presentation>> = ConcurrentHashMap()
+    fun doTestFiles(semaphore: Semaphore, concurrency: Int): Map<String, Pair<SlideConverter?, Presentation>> {
+        var foundTests: ConcurrentHashMap<String, Pair<SlideConverter?, Presentation>> = ConcurrentHashMap()
+
+        var pipelines: List<List<File>> = makePipeline(slideFiles, concurrency)
 
         makeProgressBar(
             "Testing Files",
             slideFiles.size.toLong() * 2,
         ).use {bar ->
             runBlocking {
-                eachSlideFile { file ->
+                pipelines.forEach {files ->
                     async(Dispatchers.Default) {
                         semaphore.withPermit {
-                            bar.step()
+                            files.forEach {file ->
+                                bar.step()
 
-                            val extractor = createSlideExtractor(file)
-                            val presentation = extractor.presentation()
-                            var foundMatchingScriptRunner: ScriptRunner? = null
+                                val extractor = createSlideExtractor(file)
+                                val presentation = extractor.presentation()
+                                var foundMatchingScriptRunner: ScriptRunner? = null
 
-                            eachScriptRunner {scriptRunner ->
-                                if (scriptRunner.test(presentation)) {
-                                    foundMatchingScriptRunner = scriptRunner
+                                eachScriptRunner {scriptRunner ->
+                                    if (scriptRunner.test(presentation)) {
+                                        foundMatchingScriptRunner = scriptRunner
+                                    }
+                                    foundMatchingScriptRunner != null
                                 }
-                                foundMatchingScriptRunner != null
-                            }
 
-                            foundTests += file.path to Pair(foundMatchingScriptRunner?.slideConverter, presentation)
-                            bar.step()
+                                foundTests.put(file.path, Pair(foundMatchingScriptRunner?.slideConverter, presentation))
+                                bar.step()
+                            }
                         }
                     }
                 }
@@ -136,4 +140,17 @@ class MainRunner {
         return foundTests;
     }
     
+    protected fun makePipeline(slideFiles: List<File>, concurrency: Int): List<List<File>> {
+        var pipelines: MutableList<List<File>> = ArrayList()
+        val maxSize = slideFiles.size
+        val chunkSize = maxSize / concurrency
+        var index = 0;
+
+        for (i in 0 until concurrency) {
+            pipelines.add(slideFiles.subList(index, index + chunkSize))
+            index += chunkSize
+        }
+
+        return pipelines
+    }
 }

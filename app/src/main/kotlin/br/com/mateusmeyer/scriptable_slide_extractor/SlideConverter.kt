@@ -4,7 +4,8 @@ import br.com.mateusmeyer.scriptable_slide_extractor.model.Presentation
 import br.com.mateusmeyer.scriptable_slide_extractor.model.SlideConverterPayload
 
 fun converter(fn: SlideConverter.() -> Unit) = SlideConverter().apply(fn)
-class SlideConverter {
+
+class SlideConverter{
     class Properties {
         var name: String? = null;
         var author: String? = null;
