@@ -19,9 +19,9 @@ import br.com.mateusmeyer.scriptable_slide_extractor.model.SlideConverterPayload
 
 class ConvertCommand : CliktCommand(name="convert") {
 
-    val scriptPath: Path by argument(help = "Script extraction path (file/folder)")
+    val scriptPath: Path by argument(help = "Script(s) path")
         .path(mustExist = true, mustBeReadable = true)
-    val testFiles: List<Path> by argument(help = "File(s) for testing")
+    val testFiles: List<Path> by argument(help = "File(s) to convert")
         .path(mustExist = true, mustBeReadable = true)
         .multiple()
 
@@ -38,7 +38,7 @@ class ConvertCommand : CliktCommand(name="convert") {
 
         val semaphore = Semaphore(parentConcurrency)
 
-        runner.doCompileScripts(semaphore)
+        runner.doCompileScripts()
         runner.doSortScripts()
         runner.doTestFiles(semaphore, parentConcurrency)
             .let(::abortOnNonConvertibleFiles)
@@ -47,7 +47,7 @@ class ConvertCommand : CliktCommand(name="convert") {
     }
 
     protected fun abortOnNonConvertibleFiles(results: Map<String, Pair<SlideConverter?, Presentation>>): Map<String, Pair<SlideConverter?, Presentation>> {
-        val empties = results.filter { (file, pair) ->
+        val empties = results.filter { (_, pair) ->
             val (converter) = pair;
             converter == null
         }
@@ -73,7 +73,7 @@ class ConvertCommand : CliktCommand(name="convert") {
             "Converting Files",
             foundFiles.toLong() * 2,
         ).use {bar ->
-            for ((file, pair) in results) {
+            for ((_, pair) in results) {
                 bar.step()
 
                 val (converter, presentation) = pair

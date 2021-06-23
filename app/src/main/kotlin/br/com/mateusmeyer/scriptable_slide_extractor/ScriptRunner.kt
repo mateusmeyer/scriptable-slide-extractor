@@ -48,6 +48,10 @@ class ScriptRunner {
         slideConverter.props.test?.invoke(presentation) ?: false
     }
 
+    fun command(command: String, args: Map<String, String>, presentation: Presentation) {
+        slideConverter.props.command?.invoke(command, args, presentation)
+    }
+
     protected fun generateScriptContent(file: File): String {
         return (
             """

@@ -84,7 +84,7 @@ class MainRunner {
         }
     }
 
-    fun doCompileScripts(semaphore: Semaphore) {
+    fun doCompileScripts() {
         makeProgressBar(
             "Compiling Scripts",
             scriptFiles.size.toLong() * 2,
@@ -104,10 +104,32 @@ class MainRunner {
     fun doTestFiles(semaphore: Semaphore, concurrency: Int): Map<String, Pair<SlideConverter?, Presentation>> {
         var foundTests: ConcurrentHashMap<String, Pair<SlideConverter?, Presentation>> = ConcurrentHashMap()
 
+        doForEachSlide("Testing Files", semaphore, concurrency) { file, _, presentation ->
+            var foundMatchingScriptRunner: ScriptRunner? = null
+
+            eachScriptRunner {scriptRunner ->
+                if (scriptRunner.test(presentation)) {
+                    foundMatchingScriptRunner = scriptRunner
+                }
+                foundMatchingScriptRunner != null
+            }
+
+            foundTests.put(file.path, Pair(foundMatchingScriptRunner?.slideConverter, presentation))
+        }
+
+        return foundTests;
+    }
+
+    fun doForEachSlide(
+        title: String,
+        semaphore: Semaphore,
+        concurrency: Int,
+        runner: (File, SlideExtractor, Presentation) -> Unit
+    ) {
         var pipelines: List<List<File>> = makePipeline(slideFiles, concurrency)
 
         makeProgressBar(
-            "Testing Files",
+            title,
             slideFiles.size.toLong() * 2,
         ).use {bar ->
             runBlocking {
@@ -119,16 +141,9 @@ class MainRunner {
 
                                 val extractor = createSlideExtractor(file)
                                 val presentation = extractor.presentation()
-                                var foundMatchingScriptRunner: ScriptRunner? = null
 
-                                eachScriptRunner {scriptRunner ->
-                                    if (scriptRunner.test(presentation)) {
-                                        foundMatchingScriptRunner = scriptRunner
-                                    }
-                                    foundMatchingScriptRunner != null
-                                }
+                                runner(file, extractor, presentation)
 
-                                foundTests.put(file.path, Pair(foundMatchingScriptRunner?.slideConverter, presentation))
                                 bar.step()
                             }
                         }
@@ -136,8 +151,6 @@ class MainRunner {
                 }
             }
         }
-
-        return foundTests;
     }
     
     protected fun makePipeline(slideFiles: List<File>, concurrency: Int): List<List<File>> {

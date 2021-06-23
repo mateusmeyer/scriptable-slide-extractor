@@ -12,6 +12,7 @@ class SlideConverter{
         var version: String? = null;
         var test: ((Presentation) -> Boolean)? = null;
         var convert: ((SlideConverterPayload) -> Unit)? = null;
+        var command: ((String, Map<String, String>, Presentation) -> Unit)? = null;
     }
 
     var props: Properties = Properties()
@@ -29,10 +30,14 @@ class SlideConverter{
     }
 
     fun test(tester: (presentation: Presentation) -> Boolean) {
-        props.test = tester;
+        props.test = tester
+    }
+
+    fun command(command: (command: String, args: Map<String, String>, presentation: Presentation) -> Unit) {
+        props.command = command
     }
 
     fun convert(converter: (payload: SlideConverterPayload) -> Unit) {
-        props.convert = converter;
+        props.convert = converter
     }
 }

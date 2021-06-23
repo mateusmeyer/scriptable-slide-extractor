@@ -21,7 +21,7 @@ import br.com.mateusmeyer.scriptable_slide_extractor.model.Presentation;
 
 class TestCommand : CliktCommand(name="test") {
 
-    val scriptPath: Path by argument(help = "Script extraction path (file/folder)")
+    val scriptPath: Path by argument(help = "Script(s) path")
         .path(mustExist = true, mustBeReadable = true)
     val testFiles: List<Path> by argument(help = "File(s) for testing")
         .path(mustExist = true, mustBeReadable = true)
@@ -40,7 +40,7 @@ class TestCommand : CliktCommand(name="test") {
 
         val semaphore = Semaphore(parentConcurrency)
 
-        runner.doCompileScripts(semaphore)
+        runner.doCompileScripts()
         runner.doSortScripts()
         runner.doTestFiles(semaphore, parentConcurrency)
             .let(::printTestFiles)
