@@ -121,31 +121,42 @@ class MainRunner {
     }
 
     fun doForEachSlide(
-        title: String,
+        title: String?,
         semaphore: Semaphore,
         concurrency: Int,
         runner: (File, SlideExtractor, Presentation) -> Unit
     ) {
         var pipelines: List<List<File>> = makePipeline(slideFiles, concurrency)
 
-        makeProgressBar(
-            title,
-            slideFiles.size.toLong() * 2,
-        ).use {bar ->
-            runBlocking {
-                pipelines.forEach {files ->
-                    async(Dispatchers.Default) {
-                        semaphore.withPermit {
-                            files.forEach {file ->
-                                bar.step()
+        if (title != null) {
+            makeProgressBar(
+                title,
+                slideFiles.size.toLong() * 2,
+            ).use {bar -> doForEachSlideAction(pipelines, semaphore, {bar.step()}, runner)}
+        } else {
+            doForEachSlideAction(pipelines, semaphore, null, runner)
+        }
+    }
 
-                                val extractor = createSlideExtractor(file)
-                                val presentation = extractor.presentation()
+    protected fun doForEachSlideAction(
+        pipelines: List<List<File>>,
+        semaphore: Semaphore,
+        step: (() -> Unit)? = {},
+        runner: (File, SlideExtractor, Presentation) -> Unit,
+    ) {
+        runBlocking {
+            pipelines.forEach {files ->
+                async(Dispatchers.Default) {
+                    semaphore.withPermit {
+                        files.forEach {file ->
+                            step?.invoke()
 
-                                runner(file, extractor, presentation)
+                            val extractor = createSlideExtractor(file)
+                            val presentation = extractor.presentation()
 
-                                bar.step()
-                            }
+                            runner(file, extractor, presentation)
+
+                            step?.invoke()
                         }
                     }
                 }

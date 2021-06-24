@@ -1,6 +1,9 @@
 package br.com.mateusmeyer.scriptable_slide_extractor
 
 import java.io.File;
+import java.util.Properties
+import java.net.URLClassLoader
+import java.net.URL
 import javax.script.ScriptEngineManager
 import javax.script.SimpleScriptContext
 import javax.script.ScriptContext
@@ -15,32 +18,47 @@ class ScriptRunner {
     }
 
     val scriptContent: String;
+    val scriptProperties: Properties?;
+    val absoluteScriptPath: String;
     lateinit var slideConverter: SlideConverter;
     val filename: String;
 
 	constructor(file: File) {
         filename = file.name
         scriptContent = generateScriptContent(file)
+        scriptProperties = getScriptProperties(file)
+        absoluteScriptPath = file.absolutePath.replace(file.name, "");
     }
 
     fun compile() {
         if (!::slideConverter.isInitialized) {
-            val engine = factory.scriptEngine as KotlinJsr223JvmLocalScriptEngine
+            var threadClassLoader: MutableURLClassLoader? = null;
 
-            val scriptContext = SimpleScriptContext()
-            var bindings = scriptContext.getBindings(ScriptContext.ENGINE_SCOPE)
-            bindings.put("converter", ::converter)
-            scriptContext.setBindings(bindings, ScriptContext.ENGINE_SCOPE)
+            if (scriptProperties != null) {
+                if (scriptProperties.containsKey("classpath")) {
+                    for (item in (scriptProperties.get("classpath") as String).split(':')) {
+                        val url = File(absoluteScriptPath + item).toURI().toURL()
 
-            val converter = engine.eval(scriptContent, scriptContext)
-
-            if (converter == null) {
-                throw Exception("Script doesn't have a 'converter' declaration.")
-            } else if (converter !is SlideConverter) {
-                throw Exception("Script returns an invalid object. Make sure that 'converter' declaration is the last of file!")
+                        if (threadClassLoader == null) {
+                            threadClassLoader = MutableURLClassLoader(arrayOf(url), this::class.java.classLoader)
+                        } else {
+                            threadClassLoader.addURL(url)
+                        }
+                    }
+                }
             }
 
-            slideConverter = converter
+            // we need to run a new thread, so we can use
+            // a custom classloader
+            if (threadClassLoader != null) {
+                val thread = Thread(::compileRunner)
+                thread.contextClassLoader = threadClassLoader;
+                thread.start();
+                thread.join();
+            } else {
+                compileRunner()
+            }
+
         }
     }
 
@@ -52,14 +70,87 @@ class ScriptRunner {
         slideConverter.props.command?.invoke(command, args, presentation)
     }
 
-    protected fun generateScriptContent(file: File): String {
-        return (
-            """
-            import ${Presentation::class.java.packageName}.*
-            val converter = bindings["converter"] as (fn: ${SlideConverter::class.qualifiedName}.() -> Unit) -> ${SlideConverter::class.qualifiedName}
+    protected fun compileRunner() {
+        val engine = factory.scriptEngine as KotlinJsr223JvmLocalScriptEngine
+        val scriptContext = SimpleScriptContext()
+        var bindings = scriptContext.getBindings(ScriptContext.ENGINE_SCOPE)
+        bindings.put("converter", ::converter)
+        scriptContext.setBindings(bindings, ScriptContext.ENGINE_SCOPE)
 
-            ${file.readText()}
-            """.trimStart())
+        val converter = engine.eval(scriptContent, scriptContext)
+
+        if (converter == null) {
+            throw Exception("Script doesn't have a 'converter' declaration.")
+        } else if (converter !is SlideConverter) {
+            throw Exception("Script returns an invalid object. Make sure that 'converter' declaration is the last of file!")
+        }
+
+        slideConverter = converter
+    }
+
+    protected fun getCurrentClassPath(): String {
+        return System.getProperty("java.class.path")
+    }
+
+    protected fun generateScriptContent(file: File): String {
+        var fileBuffer: String = "";
+        var inComment = false;
+        var injectedContent = false;
+
+        file.inputStream().bufferedReader().useLines {lines ->
+            for (line in lines) {
+                var trimLine = line.trim();
+
+                if (
+                    trimLine.isEmpty() or
+                    trimLine.startsWith("import") or
+                    trimLine.startsWith("package") or
+                    trimLine.startsWith("//") or
+                    inComment
+                ) {
+                    fileBuffer += line + '\n'
+                    continue;
+                }
+
+                if (trimLine.startsWith("/*")) {
+                    inComment = true;
+                    fileBuffer += line + '\n'
+                    continue;
+                }
+
+                if (trimLine.endsWith("*/")) {
+                    inComment = false;
+                    fileBuffer += line + '\n'
+                    continue;
+                }
+
+                if (!injectedContent) {
+                    fileBuffer += """
+                        import ${Presentation::class.java.packageName}.*
+                        val converter = bindings["converter"] as (fn: ${SlideConverter::class.qualifiedName}.() -> Unit) -> ${SlideConverter::class.qualifiedName}
+                        """.trimStart()
+
+                    injectedContent = true
+                }
+
+                fileBuffer += line + '\n'
+            }
+        }
+
+        return fileBuffer
+    }
+
+    protected fun getScriptProperties(file: File): Properties? {
+        val metaFile = File(file.absolutePath + ".properties")
+
+        if (metaFile.exists()) {
+            val properties = Properties()
+            properties.load(metaFile.inputStream())
+
+            return properties
+        }
+
+        return null
     }
 
     protected fun <R> isCompiled(fn: () -> R): R {
@@ -69,6 +160,12 @@ class ScriptRunner {
             throw Exception("Script is not compiled yet.")
         }
     }
+}
 
-    
+class MutableURLClassLoader : URLClassLoader {
+    constructor(url: Array<URL>, parent: ClassLoader): super(url, parent)
+
+    override public fun addURL(url: URL) {
+        super.addURL(url);
+    }
 }

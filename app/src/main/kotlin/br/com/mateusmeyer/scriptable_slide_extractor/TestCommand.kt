@@ -51,7 +51,7 @@ class TestCommand : CliktCommand(name="test") {
         var empties = 0
 
         if (showNonConvertableOnly) {
-            empties = results.filter { (file, pair) ->
+            empties = results.filter { (_, pair) ->
                 val (converter) = pair;
                 converter == null
             }.size
