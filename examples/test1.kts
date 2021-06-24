@@ -1,11 +1,145 @@
 import org.redundent.kotlin.xml.*
 import br.com.mateusmeyer.scriptable_slide_extractor.model.SlideTextBox
 
+// #region Configuration
+val hymnal = Hymnal(
+    title = property("hymnal.name") ?: throw Exception("Missing hymnal.name in properties"),
+    acronym = property("hymnal.acronym") ?: throw Exception("Missing hymnal.acronym in properties"),
+)
+
+// TODO Move below configuration to Property File
+val titleSeparators = listOf('\u2013' /* – */, '-')
+val textSizes = listOf(
+    TextSizes(
+        normal = 40.0,
+        chorus = 34.0,
+        isChorusItalic = true,
+        title = 14.0,
+        author = 14.0
+    ),
+    TextSizes(
+        normal = 38.0,
+        chorus = 36.0,
+        isChorusItalic = true,
+        title = 14.0,
+        author = 14.0
+    ),
+    TextSizes(
+        normal = 38.0,
+        chorus = 38.0,
+        isChorusItalic = true,
+        title = 14.0,
+        author = 14.0
+    ),
+    TextSizes(
+        normal = 36.0,
+        chorus = 36.0,
+        isChorusItalic = true,
+        title = 14.0,
+        author = 14.0
+    ),
+    TextSizes(
+        normal = 37.0,
+        chorus = 37.0,
+        isChorusItalic = true,
+        title = 14.0,
+        author = 14.0
+    ),
+    TextSizes(
+        normal = 30.0,
+        chorus = 30.0,
+        isChorusItalic = true,
+        title = 14.0,
+        author = 14.0
+    ),
+    TextSizes(
+        normal = 35.0,
+        chorus = 35.0,
+        isChorusItalic = true,
+        title = 14.0,
+        author = 14.0
+    ),
+    TextSizes(
+        normal = 40.0,
+        chorus = 40.0,
+        isChorusItalic = true,
+        title = 14.0,
+        author = 14.0
+    ),
+    TextSizes(
+        normal = 40.0,
+        chorus = 40.0,
+        isChorusItalic = true,
+        title = 14.0,
+        author = 12.0
+    ),
+    TextSizes(
+        normal = 18.0,
+        chorus = 18.0,
+        isChorusItalic = true,
+        title = 14.0,
+        author = 14.0
+    ),
+    TextSizes(
+        normal = 34.0,
+        chorus = 34.0,
+        isChorusItalic = true,
+        title = 14.0,
+        author = 14.0
+    ),
+    TextSizes(
+        normal = 24.0,
+        chorus = 24.0,
+        isChorusItalic = true,
+        title = 14.0,
+        author = 14.0
+    ),
+    TextSizes(
+        normal = 32.0,
+        chorus = 32.0,
+        isChorusItalic = true,
+        title = 14.0,
+        author = 14.0
+    ),
+    TextSizes(
+        normal = 39.0,
+        chorus = 39.0,
+        isChorusItalic = true,
+        title = 14.0,
+        author = 14.0
+    ),
+    TextSizes(
+        normal = 33.0,
+        chorus = 33.0,
+        isChorusItalic = true,
+        title = 14.0,
+        author = 14.0
+    ),
+)
+
+val titleIgnoreUppercaseSentences = arrayOf(
+    "a", "e", "dos",
+    "do", "de", "da",
+    "ao", "à", "na",
+    "sem", "pela", "em",
+    "por", "com", "um",
+    "no", "que", "é",
+    "ó", "às", "para",
+    "pelo"
+)
+// #endregion
+
+data class Hymnal(
+    val title: String,
+    val acronym: String
+)
+
 data class TextSizes(
     val normal: Double,
     val chorus: Double,
     val isChorusItalic: Boolean,
-    val title: Double
+    val title: Double,
+    val author: Double
 )
 
 data class WithChorusSlideTextBox(
@@ -21,7 +155,7 @@ data class ExtractedSlideInfo(
 
 data class ExtractedPresentationInfo(
     val title: String,
-    val number: Int?,
+    val reference: String?,
     val authors: List<String>,
     val verses: List<Pair<String, Boolean>>,
     val slideInfo: List<ExtractedSlideInfo>
@@ -29,57 +163,6 @@ data class ExtractedPresentationInfo(
 
 class PresentationParseException(message: String) : Exception(message) {}
 
-val titleSeparators = listOf('\u2013' /* – */, '-')
-val textSizes = listOf(
-    TextSizes(
-        normal = 40.0,
-        chorus = 34.0,
-        isChorusItalic = true,
-        title = 14.0
-    ),
-    TextSizes(
-        normal = 38.0,
-        chorus = 38.0,
-        isChorusItalic = true,
-        title = 14.0
-    ),
-    TextSizes(
-        normal = 36.0,
-        chorus = 36.0,
-        isChorusItalic = true,
-        title = 14.0
-    ),
-    TextSizes(
-        normal = 37.0,
-        chorus = 37.0,
-        isChorusItalic = true,
-        title = 14.0
-    ),
-    TextSizes(
-        normal = 30.0,
-        chorus = 30.0,
-        isChorusItalic = true,
-        title = 14.0
-    ),
-    TextSizes(
-        normal = 35.0,
-        chorus = 35.0,
-        isChorusItalic = true,
-        title = 14.0
-    ),
-    TextSizes(
-        normal = 40.0,
-        chorus = 40.0,
-        isChorusItalic = true,
-        title = 14.0
-    ),
-    TextSizes(
-        normal = 18.0,
-        chorus = 18.0,
-        isChorusItalic = true,
-        title = 14.0
-    ),
-)
 
 fun extractInfo(slide: Slide): ExtractedSlideInfo? {
     val textBoxes = slide.textBoxes
@@ -94,6 +177,7 @@ fun extractInfo(slide: Slide): ExtractedSlideInfo? {
         var matchContentSize = false
         var matchChorusSize = false
         var matchTitleSize = false
+        var matchAuthorSize = false
 
         textLoop@ for (textBox in textBoxes) {
             for (paragraph in textBox.paragraphs) {
@@ -103,13 +187,15 @@ fun extractInfo(slide: Slide): ExtractedSlideInfo? {
 
                     if (textRunSize == textSize.normal.toDouble()) {
                         matchContentSize = true
-                    } else if (textRunSize == textSize.title.toDouble()) {
+                    } else if (textRunSize == textSize.title.toDouble() && !matchTitleSize) {
                         matchTitleSize = true
+                    } else if (textRunSize == textSize.author.toDouble()) {
+                        matchAuthorSize = true
                     }
 
                     if (
                         (textSize.isChorusItalic && textRun.italic && (textRunSize == textSize.chorus.toDouble())) or
-                        (!textSize.isChorusItalic && (textRunSize == textSize.chorus.toDouble()))
+                        (!textSize.isChorusItalic && (textSize.normal != textSize.chorus) && (textRunSize == textSize.chorus.toDouble()))
                     ) {
                         matchChorusSize = true
                     }
@@ -119,17 +205,19 @@ fun extractInfo(slide: Slide): ExtractedSlideInfo? {
             }
         }
 
-        if (matchContentSize && matchTitleSize) {
-            firstMatchWithoutChorus = textSize
-        }
+        if (matchContentSize && matchTitleSize && matchAuthorSize) {
+            if (firstMatchWithoutChorus == null) {
+                firstMatchWithoutChorus = textSize
+            }
 
-        if (matchContentSize && matchTitleSize && matchChorusSize) {
-            foundTextSize = textSize
-            break
+            if (matchChorusSize) {
+                foundTextSize = textSize
+                break
+            }
         }
     }
 
-    if (firstMatchWithoutChorus != null) {
+    if (firstMatchWithoutChorus != null && foundTextSize == null) {
         foundTextSize = firstMatchWithoutChorus
     }
 
@@ -138,6 +226,10 @@ fun extractInfo(slide: Slide): ExtractedSlideInfo? {
     }
 
     textLoop@ for (textBox in textBoxes) {
+        if (textBox.text.trim() == "") {
+            continue
+        }
+
         for (paragraph in textBox.paragraphs) {
             for (textRun in paragraph.textRuns) {
                 val textRunSize = textRun.fontSize
@@ -154,6 +246,9 @@ fun extractInfo(slide: Slide): ExtractedSlideInfo? {
                 } else if (textRunSize == foundTextSize.title.toDouble()) {
                     titleTextBoxes += textBox
                     continue@textLoop
+                } else if (textRunSize == foundTextSize.author.toDouble()) {
+                    titleTextBoxes += textBox
+                    continue@textLoop
                 } else {
                     throw PresentationParseException("Slide ${slide.number} does not match any font disposition (2).")
                 }
@@ -168,7 +263,27 @@ fun extractInfo(slide: Slide): ExtractedSlideInfo? {
     )
 }
 
-fun parseSlideTitle(textBox: SlideTextBox): Pair<String, Int?> {
+fun preserveDelimiterRegex() = Regex("((?<=, )|(?<= ))")
+
+fun humanizeTitle(input: String): String {
+    var parts = input.toLowerCase().split(preserveDelimiterRegex())
+
+    parts = parts.mapIndexed(map@ {i, part ->
+        if (i > 0) {
+            for (ignoreSentence in titleIgnoreUppercaseSentences) {
+                if (part.trim() == ignoreSentence) {
+                    return@map part
+                }
+            }
+        }
+
+        return@map part.capitalize()
+    })
+
+    return parts.joinToString(separator = "")
+}
+
+fun parseSlideTitle(textBox: SlideTextBox): Pair<String, String?> {
     val text = textBox.text
     var textParts: List<String>? = null
 
@@ -180,11 +295,12 @@ fun parseSlideTitle(textBox: SlideTextBox): Pair<String, Int?> {
     }
 
     if (textParts == null) {
-        return Pair(text, null)
+        return Pair(humanizeTitle(text), null)
     }
 
-    val int = textParts[0].trim().toInt()
-    return Pair(textParts[1].trim(), if (int > 0) int else null)
+    val trimText = textParts[0].trim()
+    val referenceTitle = if (Character.isDigit(trimText[0])) trimText else null
+    return Pair(humanizeTitle(textParts[1].trim()), referenceTitle)
 }
 
 fun parseSlideAuthors(textBox: SlideTextBox): List<String>? {
@@ -212,7 +328,7 @@ fun parseSlideVerses(textBoxes: List<WithChorusSlideTextBox>): List<Pair<String,
 fun getSlidesInfo(presentation: Presentation): ExtractedPresentationInfo {
     var slidesInfo: List<ExtractedSlideInfo> = listOf();
     var title: String? = null
-    var number: Int? = null
+    var reference: String? = null
     var authors: List<String>? = null
     var verses: List<Pair<String, Boolean>> = listOf();
 
@@ -233,7 +349,7 @@ fun getSlidesInfo(presentation: Presentation): ExtractedPresentationInfo {
 
         var titleInfo = parseSlideTitle(titleTextBox)
         title = titleInfo.first
-        number = titleInfo.second
+        reference = titleInfo.second
 
         authors = parseSlideAuthors(authorTextBox)
     }
@@ -246,7 +362,7 @@ fun getSlidesInfo(presentation: Presentation): ExtractedPresentationInfo {
     if (title != null && authors != null) {
         return ExtractedPresentationInfo(
             title,
-            number,
+            reference,
             authors,
             verses,
             slidesInfo
@@ -256,8 +372,48 @@ fun getSlidesInfo(presentation: Presentation): ExtractedPresentationInfo {
     throw PresentationParseException("Invalid Presentation Data")
 }
 
+fun parsePresentationVerses(
+    verses: List<Pair<String, Boolean>>
+): Pair<List<Triple<String, String, Boolean>>, String> {
+    var finalVerses: List<Triple<String, String, Boolean>> = listOf();
+    var finalOrder = "";
+    var foundVerses: List<Pair<String, Boolean>> = listOf();
+
+    var chorusCounter = 1
+    var verseCounter = 1
+
+    for (i in 0 until verses.size) {
+        val pair = verses[i]
+        val (_, isChorus) = pair
+
+        var pairFoundIndex = foundVerses.indexOf(pair)
+        if (pairFoundIndex >= 0) {
+            var key = if (isChorus) {
+                "c" + pairFoundIndex
+            } else {
+                "v" + pairFoundIndex
+            }
+
+            finalOrder += key + " "
+        } else {
+            var key = if (isChorus) {
+                "c" + (chorusCounter)++
+            } else {
+                "v" + (verseCounter)++
+            }
+
+            finalVerses += Triple(pair.first, key, pair.second)
+            foundVerses += pair
+            finalOrder += key + " "
+        }
+    }
+
+    return Pair(finalVerses, finalOrder)
+}
+
 fun parsePresentation(presentation: Presentation): String {
     var slideInfo = getSlidesInfo(presentation);
+    val (verses, verseOrder) = parsePresentationVerses(slideInfo.verses)
 
     return xml("song") {
         xmlns = "http://openlyrics.info/namespace/2009/song"
@@ -273,15 +429,18 @@ fun parsePresentation(presentation: Presentation): String {
                     - slideInfo.title
                 }
             }
+            "comments" {
+                if (slideInfo.reference!!.startsWith("0")) {
+                    "comment" {
+                        - "${hymnal.acronym} ${slideInfo.reference?.replaceFirst(Regex("^0+"), "")} "
+                    }
+                }
+                "comment" {
+                    - "${hymnal.acronym} ${slideInfo.reference}"
+                }
+            }
             "verseOrder" {
-                var verseOrderVerseCounter = 1
-                var verseOrderChorusCounter = 1
-
-                - slideInfo.verses.fold("") {prev, curr -> prev + if (curr.second) {
-                    "c" + (verseOrderChorusCounter++) + " "
-                } else {
-                    "v" + (verseOrderVerseCounter++) + " "
-                }}
+                - verseOrder
             }
             "authors" {
                 for (author in slideInfo.authors) {
@@ -293,8 +452,8 @@ fun parsePresentation(presentation: Presentation): String {
             }
             "songbooks" {
                 "songbook" {
-                    attribute("name", "Hinário")
-                    attribute("entry", slideInfo.number ?: "")
+                    attribute("name", hymnal.title)
+                    attribute("entry", slideInfo.reference ?: "")
                 }
             }
         }
@@ -316,14 +475,9 @@ fun parsePresentation(presentation: Presentation): String {
             var verseCounter = 1;
             var chorusCounter = 1;
 
-            for ((verse, isChorus) in slideInfo.verses) {
+            for ((verse, verseKey, isChorus) in verses) {
                 "verse" {
-                    attribute("name", if (isChorus) {
-                            "c" + (chorusCounter++)
-                        } else {
-                            "v" + (verseCounter++)
-                        }
-                    )
+                    attribute("name", verseKey)
                     "lines" {
                         if (isChorus) {
                             element("tag", {
@@ -332,7 +486,7 @@ fun parsePresentation(presentation: Presentation): String {
                                 var linesIterator = lines.iterator()
                                 while (linesIterator.hasNext()) {
                                     val text = linesIterator.next();
-                                    text(text)
+                                    text(text.trim())
 
                                     if (linesIterator.hasNext()) {
                                         element("br")
@@ -344,7 +498,7 @@ fun parsePresentation(presentation: Presentation): String {
                             var linesIterator = lines.iterator()
                             while (linesIterator.hasNext()) {
                                 val text = linesIterator.next();
-                                text(text)
+                                text(text.trim())
 
                                 if (linesIterator.hasNext()) {
                                     element("br")
@@ -356,7 +510,7 @@ fun parsePresentation(presentation: Presentation): String {
                 }
             }
         }
-    }.toString(false)
+    }.toString()
 }
 
 converter {
