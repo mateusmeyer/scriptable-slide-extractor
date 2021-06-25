@@ -13,13 +13,15 @@ import org.jetbrains.kotlin.script.jsr223.KotlinJsr223JvmLocalScriptEngine
 
 import br.com.mateusmeyer.scriptable_slide_extractor.model.Presentation;
 
+val INJECT_CONTENT_TOKEN = "/* @__#InjectContent! */"
+
 class ScriptRunner {
     companion object {
         val scriptEngine = ScriptEngineManager()
         val factory = scriptEngine.getEngineByExtension("kts").factory
     }
 
-    val scriptContent: String;
+    val scriptContent: Pair<StringBuilder, StringBuilder>;
     val scriptProperties: Properties?;
     val absoluteScriptPath: String;
     lateinit var slideConverter: SlideConverter;
@@ -49,8 +51,38 @@ class ScriptRunner {
                 }
             }
 
-            if (scriptProperties.containsKey("import")) {
-                for (item in (scriptProperties.get("import") as String).split(':')) {
+            if (scriptProperties.containsKey("import.scripts")) {
+                for (item in (scriptProperties.get("import.scripts") as String).split(':')) {
+                    val path = File(absoluteScriptPath + item)
+
+                    if (path.exists()) {
+                        val scriptContent = this.scriptContent.first
+                        val importContent = this.scriptContent.second
+
+                        val injectionTokenIndex = scriptContent.indexOf(INJECT_CONTENT_TOKEN)
+
+                        if (injectionTokenIndex >= 0) {
+                            val (importScriptContent, importImportContent) = separateImportsAndContent(path)
+
+                            importContent.append(
+                                importImportContent.toString() + "\n"
+                            )
+
+                            scriptContent.insert(
+                                injectionTokenIndex,
+                                importScriptContent.toString() + "\n"
+                            )
+                        } else {
+                            throw Exception("Cannot find injection token in generated script")
+                        }
+                    } else {
+                        throw Exception("Cannot find import script ${path.canonicalPath}")
+                    }
+                }
+            }
+
+            if (scriptProperties.containsKey("import.properties")) {
+                for (item in (scriptProperties.get("import.properties") as String).split(':')) {
                     val path = absoluteScriptPath + item
                     val oldProperties = scriptProperties
                     val newProperties = getScriptProperties(File(path))
@@ -93,7 +125,13 @@ class ScriptRunner {
         bindings.put("property", {key: String -> properties.getProperty(key)})
         scriptContext.setBindings(bindings, ScriptContext.ENGINE_SCOPE)
 
-        val converter = engine.eval(scriptContent, scriptContext)
+        val scriptContent = this.scriptContent.first
+        val importContent = this.scriptContent.second
+        val script = importContent
+            .append(scriptContent.toString())
+            .toString()
+
+        val converter = engine.eval(script, scriptContext)
 
         if (converter == null) {
             throw Exception("Script doesn't have a 'converter' declaration.")
@@ -108,65 +146,128 @@ class ScriptRunner {
         return System.getProperty("java.class.path")
     }
 
-    protected fun generateScriptContent(file: File): String {
-        var fileBuffer: String = "";
-        var inComment = false;
-        var injectedContent = false;
+    protected fun generateScriptContent(file: File): Pair<StringBuilder, StringBuilder> {
+        var fileBuffer = StringBuilder()
+        var importBuffer = StringBuilder()
+        var inComment = false
+        var injectedContent = false
+
+        importBuffer.append("import ${Presentation::class.java.packageName}.*\n")
 
         file.inputStream().bufferedReader().useLines {lines ->
             for (line in lines) {
-                var trimLine = line.trim();
+                var trimLine = line.trim()
 
                 if (
                     trimLine.isEmpty() or
-                    trimLine.startsWith("import") or
-                    trimLine.startsWith("package") or
                     trimLine.startsWith("//") or
                     inComment
                 ) {
-                    fileBuffer += line + '\n'
+                    fileBuffer.append(line + '\n')
+                    continue;
+                }
+
+                if (
+                    trimLine.startsWith("import") or
+                    trimLine.startsWith("package")
+                ) {
+                    importBuffer.append(line + '\n')
                     continue;
                 }
 
                 if (trimLine.startsWith("/*")) {
                     inComment = true;
-                    fileBuffer += line + '\n'
+                    fileBuffer.append(line + '\n')
                     continue;
                 }
 
                 if (trimLine.endsWith("*/")) {
                     inComment = false;
-                    fileBuffer += line + '\n'
+                    fileBuffer.append(line + '\n')
                     continue;
                 }
 
                 if (!injectedContent) {
-                    fileBuffer += """
-                        import ${Presentation::class.java.packageName}.*
-                        val converter = bindings["converter"] as (fn: ${SlideConverter::class.qualifiedName}.() -> Unit) -> ${SlideConverter::class.qualifiedName}
-                        val property = bindings["property"] as (String) -> String?
-                        """.trimStart()
+                    fileBuffer.append("""
+                        |val converter = bindings["converter"] as (fn: ${SlideConverter::class.qualifiedName}.() -> Unit) -> ${SlideConverter::class.qualifiedName}
+                        |val property = bindings["property"] as (String) -> String?
+                        |
+                        |${INJECT_CONTENT_TOKEN}
+                        |
+                        |""".trimMargin())
 
                     injectedContent = true
                 }
 
-                fileBuffer += line + '\n'
+                fileBuffer.append(line + '\n')
             }
         }
 
-        return fileBuffer
+        return Pair(fileBuffer, importBuffer)
+    }
+
+    protected fun separateImportsAndContent(file: File): Pair<StringBuilder, StringBuilder> {
+        var fileBuffer = StringBuilder()
+        var importBuffer = StringBuilder()
+        var inComment = false
+        
+        file.inputStream().bufferedReader().useLines {lines ->
+            for (line in lines) {
+                var trimLine = line.trim()
+
+                if (trimLine.startsWith("package")) {
+                    throw Exception("package declaration cannot be used inside imported scripts")
+                }
+
+                if (
+                    trimLine.isEmpty() or
+                    trimLine.startsWith("//") or
+                    inComment
+                ) {
+                    fileBuffer.append(line + '\n')
+                    continue;
+                }
+
+                if (trimLine.startsWith("/*")) {
+                    inComment = true;
+                    fileBuffer.append(line + '\n')
+                    continue;
+                }
+
+                if (trimLine.endsWith("*/")) {
+                    inComment = false;
+                    fileBuffer.append(line + '\n')
+                    continue;
+                }
+
+                if ( 
+                    trimLine.startsWith("import")
+                ) {
+                    importBuffer.append(line + '\n');
+                    continue;
+                }
+
+                fileBuffer.append(line + '\n')
+            }
+        }
+
+        return Pair(fileBuffer, importBuffer)
     }
 
     protected fun getScriptProperties(metaFile: File): Properties? {
 
         if (metaFile.exists()) {
             val properties = Properties()
-            properties.load(InputStreamReader(metaFile.inputStream(), Charset.forName("UTF-8")))
+            properties.load(getFileReader(metaFile))
 
             return properties
         }
 
         return null
+    }
+
+    protected fun getFileReader(file: File): InputStreamReader {
+        return InputStreamReader(file.inputStream(), Charset.forName("UTF-8"))
     }
 
     protected fun <R> isCompiled(fn: () -> R): R {
