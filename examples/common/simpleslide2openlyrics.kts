@@ -3,27 +3,41 @@ import org.redundent.kotlin.xml.*
 data class Hymnal(val title: String, val acronym: String)
 
 data class TextSizes(
-        val normal: Double,
-        val chorus: Double,
-        val isChorusItalic: Boolean,
-        val title: Double,
-        val author: Double
+    val normal: Double,
+    val chorus: Double,
+    val isChorusItalic: Boolean,
+    val title: Double,
+    val author: Double
 )
 
 data class WithChorusSlideTextBox(val textBox: SlideTextBox, val chorus: Boolean)
 
 data class ExtractedSlideInfo(
-        val slide: Slide,
-        val titleTextBoxes: List<SlideTextBox>,
-        val contentTextBoxes: List<WithChorusSlideTextBox>
+    val slide: Slide,
+    val titleTextBoxes: List<SlideTextBox>,
+    val contentTextBoxes: List<WithChorusSlideTextBox>,
+    val foundTextSize: TextSizes
 )
 
 data class ExtractedPresentationInfo(
-        val title: String,
-        val reference: String?,
-        val authors: List<String>,
-        val verses: List<Pair<String, Boolean>>,
-        val slideInfo: List<ExtractedSlideInfo>
+    val title: String,
+    val reference: String?,
+    val authors: List<AuthorInfo>,
+    val verses: List<Pair<String, Boolean>>,
+    val slideInfo: List<ExtractedSlideInfo>
+)
+
+enum class AuthorType {
+    WORDS,
+    MUSIC,
+    TRANSLATION,
+    ARRANGEMENT
+}
+
+data class AuthorInfo(
+    val name: String,
+    val type: AuthorType,
+    val translationLanguage : String? = null
 )
 
 class PresentationParseException(message: String) : Exception(message) {}
@@ -32,9 +46,10 @@ class SimpleSlide2OpenLyricsConverter(
     val hymnal: Hymnal,
     val textSizes: List<TextSizes>,
     val titleSeparators: List<Char>,
-    val titleIgnoreUppercaseSentences: Array<String>
+    val titleIgnoreUppercaseSentences: Array<String>,
+    val authorMapper: ((info: AuthorInfo) -> List<AuthorInfo>)? = null
 ) {
-    fun extractInfo(slide: Slide): ExtractedSlideInfo? {
+    fun extractInfo(slide: Slide, previousTextSize: TextSizes?): ExtractedSlideInfo? {
         val textBoxes = slide.textBoxes
 
         var contentTextBoxes: List<WithChorusSlideTextBox> = listOf()
@@ -77,14 +92,19 @@ class SimpleSlide2OpenLyricsConverter(
                 }
             }
 
-            if (matchContentSize && matchTitleSize && matchAuthorSize) {
-                if (firstMatchWithoutChorus == null) {
-                    firstMatchWithoutChorus = textSize
-                }
+            if (matchContentSize && matchTitleSize) {
+                // We can infer the title from last slide
+                // (previousTextSize != null), so we are
+                // safe to skip author font size match
+                if (matchAuthorSize || (previousTextSize != null)) {
+                    if (firstMatchWithoutChorus == null) {
+                        firstMatchWithoutChorus = textSize
+                    }
 
-                if (matchChorusSize) {
-                    foundTextSize = textSize
-                    break
+                    if (matchChorusSize) {
+                        foundTextSize = textSize
+                        break
+                    }
                 }
             }
         }
@@ -130,7 +150,12 @@ class SimpleSlide2OpenLyricsConverter(
             }
         }
 
-        return ExtractedSlideInfo(slide, titleTextBoxes, contentTextBoxes)
+        return ExtractedSlideInfo(
+            slide,
+            titleTextBoxes,
+            contentTextBoxes,
+            foundTextSize
+        )
     }
 
     fun preserveDelimiterRegex() = Regex("((?<=, )|(?<= ))")
@@ -175,22 +200,26 @@ class SimpleSlide2OpenLyricsConverter(
         return Pair(humanizeTitle(textParts[1].trim()), referenceTitle)
     }
 
-    fun parseSlideAuthors(textBox: SlideTextBox): List<String>? {
+    fun parseSlideAuthors(textBox: SlideTextBox): List<AuthorInfo>? {
         val text = textBox.text
         var textParts: List<String>? = null
+        var validSeparators = charArrayOf()
 
         for (separator in titleSeparators) {
             if (text.contains(separator)) {
-                textParts = text.split(separator)
-                break
+                validSeparators += separator
             }
         }
 
-        if (textParts == null) {
-            return listOf(text)
+        if (validSeparators.size > 0) {
+            textParts = text.split(*validSeparators)
         }
 
-        return textParts?.map { it.trim() }
+        if (textParts == null) {
+            return listOf(AuthorInfo(text.trim(), AuthorType.ARRANGEMENT))
+        }
+
+        return textParts?.map { AuthorInfo(it.trim(), AuthorType.ARRANGEMENT) }
     }
 
     fun parseSlideVerses(textBoxes: List<WithChorusSlideTextBox>): List<Pair<String, Boolean>> {
@@ -201,17 +230,20 @@ class SimpleSlide2OpenLyricsConverter(
         var slidesInfo: List<ExtractedSlideInfo> = listOf()
         var title: String? = null
         var reference: String? = null
-        var authors: List<String>? = null
+        var authors: List<AuthorInfo>? = null
         var verses: List<Pair<String, Boolean>> = listOf()
 
+        var lastTextSize: TextSizes? = null
+
         for (slide in presentation.slides) {
-            val extractionInfo = extractInfo(slide)
+            val extractionInfo = extractInfo(slide, lastTextSize)
 
             if (extractionInfo == null) {
                 throw PresentationParseException("Invalid Slide Data")
             }
 
             slidesInfo += extractionInfo
+            lastTextSize = extractionInfo.foundTextSize
         }
 
         if (slidesInfo[0].titleTextBoxes.size >= 2) {
@@ -224,6 +256,10 @@ class SimpleSlide2OpenLyricsConverter(
             reference = titleInfo.second
 
             authors = parseSlideAuthors(authorTextBox)
+
+            if (authorMapper != null) {
+                authors = authors?.flatMap(authorMapper)
+            }
         }
 
         for (slideInfo in slidesInfo) {
@@ -283,90 +319,99 @@ class SimpleSlide2OpenLyricsConverter(
         val (verses, verseOrder) = parsePresentationVerses(slideInfo.verses)
 
         return xml("song") {
-                    xmlns = "http://openlyrics.info/namespace/2009/song"
-                    globalProcessingInstruction("xml", "version" to "1.0", "encoding" to "UTF-8")
-                    attribute("version", "0.8")
-                    attribute("createdIn", "scriptable-slide-extractor:devel")
-                    attribute("modifiedIn", "scriptable-slide-extractor:devel")
-                    attribute("modifiedDate", "TODO ISO8601 Date")
+            xmlns = "http://openlyrics.info/namespace/2009/song"
+            globalProcessingInstruction("xml", "version" to "1.0", "encoding" to "UTF-8")
+            attribute("version", "0.8")
+            attribute("createdIn", "scriptable-slide-extractor:devel")
+            attribute("modifiedIn", "scriptable-slide-extractor:devel")
+            attribute("modifiedDate", "TODO ISO8601 Date")
 
-                    "properties" {
-                        "titles" { "title" { -slideInfo.title } }
-                        "comments" {
-                            if (slideInfo.reference!!.startsWith("0")) {
-                                "comment" {
-                                    -"${hymnal.acronym} ${slideInfo.reference?.replaceFirst(Regex("^0+"), "")} "
-                                }
-                            }
-                            "comment" { -"${hymnal.acronym} ${slideInfo.reference}" }
-                        }
-                        "verseOrder" { -verseOrder }
-                        "authors" {
-                            for (author in slideInfo.authors) {
-                                "author" {
-                                    attribute("type", "music")
-                                    -author
-                                }
-                            }
-                        }
-                        "songbooks" {
-                            "songbook" {
-                                attribute("name", hymnal.title)
-                                attribute("entry", slideInfo.reference ?: "")
-                            }
+            "properties" {
+                "titles" { "title" { -slideInfo.title } }
+                "comments" {
+                    if (slideInfo.reference!!.startsWith("0")) {
+                        "comment" {
+                            -"${hymnal.acronym} ${slideInfo.reference?.replaceFirst(Regex("^0+"), "")} "
                         }
                     }
-                    "format" {
-                        "tags" {
-                            attribute("application", "OpenLP")
-                            "tag" {
-                                attribute("name", "it")
-                                "open" { -"<em>" }
-                                "close" { -"</em>" }
+                    "comment" { -"${hymnal.acronym} ${slideInfo.reference}" }
+                }
+                "verseOrder" { -verseOrder }
+                "authors" {
+                    for ((author, type, lang) in slideInfo.authors) {
+                        "author" {
+                            attribute("type", when(type) {
+                                AuthorType.WORDS -> "words"
+                                AuthorType.MUSIC -> "music"
+                                AuthorType.TRANSLATION -> "translation"
+                                AuthorType.ARRANGEMENT -> "arrangement"
+                            })
+                            if (lang != null) {
+                                attribute("lang", lang)
                             }
+
+                            -author
                         }
                     }
-                    "lyrics" {
-                        var verseCounter = 1
-                        var chorusCounter = 1
+                }
+                "songbooks" {
+                    "songbook" {
+                        attribute("name", hymnal.title)
+                        attribute("entry", slideInfo.reference ?: "")
+                    }
+                }
+            }
+            "format" {
+                "tags" {
+                    attribute("application", "OpenLP")
+                    "tag" {
+                        attribute("name", "it")
+                        "open" { -"<em>" }
+                        "close" { -"</em>" }
+                    }
+                }
+            }
+            "lyrics" {
+                var verseCounter = 1
+                var chorusCounter = 1
 
-                        for ((verse, verseKey, isChorus) in verses) {
-                            "verse" {
-                                attribute("name", verseKey)
-                                "lines" {
-                                    if (isChorus) {
-                                        element(
-                                                "tag",
-                                                {
-                                                    attribute("name", "it")
-                                                    var lines = verse.split("\n")
-                                                    var linesIterator = lines.iterator()
-                                                    while (linesIterator.hasNext()) {
-                                                        val text = linesIterator.next()
-                                                        text(text.trim())
+                for ((verse, verseKey, isChorus) in verses) {
+                    "verse" {
+                        attribute("name", verseKey)
+                        "lines" {
+                            if (isChorus) {
+                                element(
+                                        "tag",
+                                        {
+                                            attribute("name", "it")
+                                            var lines = verse.split("\n")
+                                            var linesIterator = lines.iterator()
+                                            while (linesIterator.hasNext()) {
+                                                val text = linesIterator.next()
+                                                text(text.trim())
 
-                                                        if (linesIterator.hasNext()) {
-                                                            element("br")
-                                                        }
-                                                    }
-                                                })
-                                    } else {
-                                        var lines = verse.split("\n")
-                                        var linesIterator = lines.iterator()
-                                        while (linesIterator.hasNext()) {
-                                            val text = linesIterator.next()
-                                            text(text.trim())
-
-                                            if (linesIterator.hasNext()) {
-                                                element("br")
+                                                if (linesIterator.hasNext()) {
+                                                    element("br")
+                                                }
                                             }
-                                        }
+                                        })
+                            } else {
+                                var lines = verse.split("\n")
+                                var linesIterator = lines.iterator()
+                                while (linesIterator.hasNext()) {
+                                    val text = linesIterator.next()
+                                    text(text.trim())
+
+                                    if (linesIterator.hasNext()) {
+                                        element("br")
                                     }
                                 }
                             }
                         }
                     }
                 }
-                .toString()
+            }
+        }
+        .toString()
     }
 }

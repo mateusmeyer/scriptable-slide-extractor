@@ -9,8 +9,7 @@ converter {
         acronym = property("hymnal.acronym") ?: throw Exception("Missing hymnal.acronym in properties"),
     )
 
-    // TODO Move below configuration to Property File
-    val titleSeparators = listOf('\u2013' /* – */, '-')
+    val titleSeparators = listOf('\u2013' /* – */, '-', '/')
     val textSizes = listOf(
         TextSizes(
             normal = 40.0,
@@ -122,7 +121,7 @@ converter {
     val titleIgnoreUppercaseSentences = arrayOf(
         "a", "e", "dos",
         "do", "de", "da",
-        "ao", "à", "na",
+        "ao", "à", "na", "o",
         "sem", "pela", "em",
         "por", "com", "um",
         "no", "que", "é",
@@ -132,7 +131,8 @@ converter {
     // #endregion
 
     val simpleConverter = SimpleSlide2OpenLyricsConverter(
-        hymnal, textSizes, titleSeparators, titleIgnoreUppercaseSentences
+        hymnal, textSizes, titleSeparators, titleIgnoreUppercaseSentences,
+        authorMapper = ::authorMapper
     )
 
 	test { presentation ->
@@ -149,9 +149,29 @@ converter {
     }
 
     command { command, args, presentation ->
-        if (command == "generate") {
-            var parsed = simpleConverter.parsePresentation(presentation)
-            println(parsed)
+        when(command) {
+            "generate" -> {
+                var parsed = simpleConverter.parsePresentation(presentation)
+                println(parsed)
+            }
+            "title" -> {
+                try {
+                    var info = simpleConverter.getSlidesInfo(presentation)
+                    println(info.title)
+                } catch (e: PresentationParseException) {
+                    println("--")
+                }
+            }
+            "authors" -> {
+                try {
+                    var info = simpleConverter.getSlidesInfo(presentation)
+                    for (author in info.authors) {
+                        println(author.name)
+                    }
+                } catch (e: PresentationParseException) {
+                    println("--")
+                }
+            }
         }
     }
 

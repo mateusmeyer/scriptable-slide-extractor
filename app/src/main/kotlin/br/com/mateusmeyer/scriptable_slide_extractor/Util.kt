@@ -12,7 +12,7 @@ fun makeProgressBar(
     title,
     max,
     125,
-    System.out,
+    System.err,
     ProgressBarStyle.ASCII,
     "",
     2,
