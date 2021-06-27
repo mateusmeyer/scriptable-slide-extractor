@@ -25,7 +25,7 @@ class CommandCommand : CliktCommand(name="command") {
     val scriptPath: Path by argument(help = "Script path")
         .path(mustExist = true, mustBeReadable = true, canBeDir = false)
     val scriptCommand by argument(help = "Script Command")
-    val scriptCommandArgs: List<String> by option(help = "Script command arguments (key:value)")
+    val scriptCommandArgs: List<String> by option("-a", "--args", help = "Script command arguments (key:value)")
         .multiple()
     val testFiles: List<Path> by argument(help = "File(s) for running commands")
         .path(mustExist = true, mustBeReadable = true)

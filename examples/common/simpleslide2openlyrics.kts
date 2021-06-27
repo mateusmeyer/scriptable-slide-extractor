@@ -36,7 +36,7 @@ enum class AuthorType {
 
 data class AuthorInfo(
     val name: String,
-    val type: AuthorType,
+    val type: AuthorType = AuthorType.ARRANGEMENT,
     val translationLanguage : String? = null
 )
 
@@ -47,7 +47,7 @@ class SimpleSlide2OpenLyricsConverter(
     val textSizes: List<TextSizes>,
     val titleSeparators: List<Char>,
     val titleIgnoreUppercaseSentences: Array<String>,
-    val authorMapper: ((info: AuthorInfo) -> List<AuthorInfo>)? = null
+    val authorMapper: ((slideInfo: ExtractedPresentationInfo, info: AuthorInfo?) -> List<AuthorInfo>)? = null
 ) {
     fun extractInfo(slide: Slide, previousTextSize: TextSizes?): ExtractedSlideInfo? {
         val textBoxes = slide.textBoxes
@@ -57,6 +57,7 @@ class SimpleSlide2OpenLyricsConverter(
 
         var foundTextSize: TextSizes? = null
         var firstMatchWithoutChorus: TextSizes? = null
+        var firstMatchWithoutAuthor: TextSizes? = null
 
         for (textSize in textSizes) {
             var matchContentSize = false
@@ -106,11 +107,19 @@ class SimpleSlide2OpenLyricsConverter(
                         break
                     }
                 }
+
+                if (!matchAuthorSize) {
+                    firstMatchWithoutAuthor = textSize
+                }
             }
         }
 
         if (firstMatchWithoutChorus != null && foundTextSize == null) {
             foundTextSize = firstMatchWithoutChorus
+        }
+
+        if (firstMatchWithoutAuthor != null && foundTextSize == null) {
+            foundTextSize = firstMatchWithoutAuthor
         }
 
         if (foundTextSize == null) {
@@ -232,6 +241,7 @@ class SimpleSlide2OpenLyricsConverter(
         var reference: String? = null
         var authors: List<AuthorInfo>? = null
         var verses: List<Pair<String, Boolean>> = listOf()
+        var info: ExtractedPresentationInfo? = null;
 
         var lastTextSize: TextSizes? = null
 
@@ -246,28 +256,36 @@ class SimpleSlide2OpenLyricsConverter(
             lastTextSize = extractionInfo.foundTextSize
         }
 
-        if (slidesInfo[0].titleTextBoxes.size >= 2) {
+        for (slideInfo in slidesInfo) {
+            verses += parseSlideVerses(slideInfo.contentTextBoxes)
+        }
+
+        if (slidesInfo[0].titleTextBoxes.size >= 1) {
             val titleTextBoxes = slidesInfo[0].titleTextBoxes
             val titleTextBox = titleTextBoxes[0]
-            val authorTextBox = titleTextBoxes[1]
+            val authorTextBox = if (titleTextBoxes.size >= 2) titleTextBoxes[1] else null
 
             var titleInfo = parseSlideTitle(titleTextBox)
             title = titleInfo.first
             reference = titleInfo.second
 
-            authors = parseSlideAuthors(authorTextBox)
+            if (authorTextBox != null) {
+                authors = parseSlideAuthors(authorTextBox)
+            }
+
+            info = ExtractedPresentationInfo(title, reference, authors ?: listOf(), verses, slidesInfo)
 
             if (authorMapper != null) {
-                authors = authors?.flatMap(authorMapper)
+                if (authors != null) {
+                    authors = authors.flatMap {authorMapper(info, it)}
+                } else {
+                    authors = authorMapper(info, null)
+                }
             }
-        }
 
-        for (slideInfo in slidesInfo) {
-            verses += parseSlideVerses(slideInfo.contentTextBoxes)
-        }
-
-        if (title != null && authors != null) {
-            return ExtractedPresentationInfo(title, reference, authors, verses, slidesInfo)
+            if (authors != null) {
+                return info.copy(authors = authors)
+            }
         }
 
         throw PresentationParseException("Invalid Presentation Data")

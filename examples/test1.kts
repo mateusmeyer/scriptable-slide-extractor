@@ -9,7 +9,7 @@ converter {
         acronym = property("hymnal.acronym") ?: throw Exception("Missing hymnal.acronym in properties"),
     )
 
-    val titleSeparators = listOf('\u2013' /* – */, '-', '/')
+    val titleSeparators = listOf('\u2013' /* – */, '/')
     val textSizes = listOf(
         TextSizes(
             normal = 40.0,
@@ -162,15 +162,39 @@ converter {
                     println("--")
                 }
             }
+            "titleWithAuthors" -> {
+                try {
+                    var info = simpleConverter.getSlidesInfo(presentation)
+                    var string = "${info.reference} - ${info.title} -- "
+                    for (author in info.authors) {
+                        string += author.name + " -- "
+                    }
+                    println(string)
+                } catch (e: PresentationParseException) {}
+            }
             "authors" -> {
                 try {
                     var info = simpleConverter.getSlidesInfo(presentation)
                     for (author in info.authors) {
-                        println(author.name)
+                        println("${author.name}")
                     }
                 } catch (e: PresentationParseException) {
                     println("--")
                 }
+            }
+            "withAuthor" -> {
+                if (!args.containsKey("author")) {
+                    throw Exception("Missing Author")
+                }
+
+                try {
+                    var info = simpleConverter.getSlidesInfo(presentation)
+                    for (author in info.authors) {
+                        if (author.name.contains(args["author"]!!)) {
+                            println("${info.reference} - ${info.title}")
+                        }
+                    }
+                } catch (e: PresentationParseException) {}
             }
         }
     }
